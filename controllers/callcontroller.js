@@ -1,11 +1,7 @@
 const Call = require("../models/call.model");
-const User = require("../models/users.model");
+//const User = require("../models/users.model");
 const twilio = require("twilio");
 const passport = require("passport");
-const audio = require("../models/audio.model");
-// const { getAudioLinkByCategory } = require("./audiocontroller");
-
-// const url = require('url');
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -13,9 +9,9 @@ const client = twilio(accountSid, authToken);
 const AccessToken = require("twilio").jwt.AccessToken;
 const VoiceGrant = AccessToken.VoiceGrant;
 const VoiceResponse = twilio.twiml.VoiceResponse;
-const callerId = "elder_call";
+const callerId = "queenevaagent";
 
-const defaultIdentity = "elder_call";
+const defaultIdentity = "queenevaagent";
 
 function callTokenGenerator(req, res) {
   var identity = null;
@@ -50,55 +46,44 @@ function callTokenGenerator(req, res) {
   callToken.identity = identity;
 
   console.log("Token:" + callToken.toJwt());
-  return res.send(callToken.toJwt());
+  return response.send(callToken.toJwt());
 }
 
-const generateCallTwiML = (req, calleeNumber, audioCategory) => {
+const generateCallTwiML = (calleeNumber) => {
   const twiml = new VoiceResponse();
+//  twiml.play(
+//    "https://drab-zebu-6611.twil.io/assets/TunePocket-Touch-Of-Life-Logo-Preview.mp3"
+//  );
+twiml.say("Hi, i'm eva, welcome to queen eva real estate, please hold..")
   twiml.play(
-    "https://drab-zebu-6611.twil.io/assets/TunePocket-Touch-Of-Life-Logo-Preview.mp3"
-  );
-  twiml.dial(
-    // {
-    //   action: `https://${req.get("host")}/play-audio?category=${audioCategory}`,
-    //   method: "GET",
-    // },
-    calleeNumber
-  );
+    "https://drab-zebu-6611.twil.io/assets/TunePocket-Touch-Of-Life-Logo-Preview.mp3",
+
+ );
 
   return twiml.toString();
 };
 
 const makeCall = async (req, res) => {
-  const { calleeNumber, calleeName, calldirection, audioCategory } = req.body;
-
+  const { calleeNumber, calleeName, calldirection } = req.body;
   try {
-    if (!calleeNumber) {
-      return res.status(400).send("Recipient number is required");
+    let numberToCall = calleeNumber || process.env.DEFAULT_PHONE_NUMBER;
+
+    if (!numberToCall) {
+      return res.status(400).json({ message: 'No number to call provided and no default number set.' });
     }
 
-    // Perform a database query to retrieve the audio link based on the audioCategory
-    const audioFile = await audio.findOne({ category: audioCategory });
+    const twimlResponse = generateCallTwiML(numberToCall);
 
-    if (!audioFile) {
-      return res
-        .status(404)
-        .send(`No audio file found for category: ${audioCategory}`);
-    }
-
-    const twimlUrl = `https://${req.get(
-      "host"
-    )}/play-audio?audioCategory=${audioCategory}`;
     const call = await client.calls.create({
-      url: twimlUrl,
-      method: "GET",
-      to: calleeNumber,
+      twiml: twimlResponse,
+      to: numberToCall,
       from: process.env.PHONE_NUMBER,
       statusCallback: "https://drab-zebu-6611.twil.io/status",
+      statusCallbackMethod: "POST",
       statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
     });
 
-    const checkDirection = () => {
+    const checkDirection = function () {
       if (call.direction === "outbound-api") {
         return "outbound";
       }
@@ -106,16 +91,14 @@ const makeCall = async (req, res) => {
 
     const callRecord = new Call({
       callSid: call.sid,
-      phoneNumber: calleeNumber,
+      phoneNumber: numberToCall,
       calldirection: checkDirection(),
       callDuration: call.duration,
       callDate: new Date().toDateString(),
     });
-
     await callRecord.save();
 
-    res.status(200).send({
-      status: 200,
+    res.status(200).json({
       message: "Call initiated successfully",
       callRecord: callRecord,
     });
@@ -144,16 +127,9 @@ const endCall = async (req, res) => {
       res.status(404).send("No ongoing calls found");
       return;
     }
-    const currentUserCall = await Call.findOne({
-      // userId: user,
-      callSid: callSid,
-    });
-    if (currentUserCall) {
-      await client.calls(callSid).update({ status: "completed" });
+     await client.calls(callSid).update({ status: "completed" });
       return res.status(200).json({ message: "Call ended successfully" });
-    } else {
-      return res.status(404).send("No ongoing calls found for this user");
-    }
+
   } catch (error) {
     console.error("Failed to end the call:", error);
     res.status(500).json({ msg: "Failed to end call", error });
