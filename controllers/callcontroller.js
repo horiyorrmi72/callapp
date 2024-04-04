@@ -78,7 +78,7 @@ const makeCall = async (req, res) => {
       twiml: twimlResponse,
       to: numberToCall,
       from: process.env.PHONE_NUMBER,
-      statusCallback: "https://drab-zebu-6611.twil.io/status",
+//      statusCallback: "https://drab-zebu-6611.twil.io/status",
       statusCallbackMethod: "POST",
       statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
     });
